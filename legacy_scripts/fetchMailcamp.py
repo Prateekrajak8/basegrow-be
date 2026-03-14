@@ -102,6 +102,15 @@ def build_domain_to_cluster_map(clusters):
     return mapping
 
 
+def parse_mailcamp_timestamp(value):
+    if value is None:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(value))
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def get_pg_connection():
     return psycopg2.connect(
         dbname=os.getenv("POSTGRES_DB", "basegrow_prod"),
@@ -185,11 +194,13 @@ def sync_mailcamp_account(account, pg_conn):
                 if r.get("emailaddress")
             }
 
+            created_at = parse_mailcamp_timestamp(c.get("starttime")) or datetime.utcnow()
+
             pg_cur.execute(
                 'INSERT INTO "Campaign" '
                 '("statId","name","sent","hardBounce","softBounce","uniqueOpeners","totalClicks",'
-                '"uniqueClickers","unsubscribes","complaints","accountId") '
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                '"uniqueClickers","unsubscribes","complaints","createdAt","accountId") '
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
                 'ON CONFLICT ("statId") DO UPDATE SET '
                 '"name" = EXCLUDED."name", '
                 '"sent" = EXCLUDED."sent", '
@@ -200,7 +211,8 @@ def sync_mailcamp_account(account, pg_conn):
                 '"uniqueClickers" = EXCLUDED."uniqueClickers", '
                 '"unsubscribes" = EXCLUDED."unsubscribes", '
                 '"complaints" = EXCLUDED."complaints", '
-                '"accountId" = EXCLUDED."accountId" '
+                '"accountId" = EXCLUDED."accountId", '
+                '"createdAt" = COALESCE("Campaign"."createdAt", EXCLUDED."createdAt") '
                 'RETURNING "id"',
                 (
                     stat_id,
@@ -213,6 +225,7 @@ def sync_mailcamp_account(account, pg_conn):
                     len(unique_clickers),
                     int(c.get("unsubscribecount") or 0),
                     int(c.get("fbl") or 0),
+                    created_at,
                     account_id,
                 ),
             )
@@ -308,7 +321,7 @@ def sync_mailcamp_account(account, pg_conn):
                     pg_cur,
                     'INSERT INTO "UserInteraction" '
                     '("email","campaignId","sent","hardBounce","softBounce","uniqueOpen",'
-                    '"totalClicks","uniqueClicker","unsubscribe","clusterId") VALUES %s '
+                    '"totalClicks","uniqueClicker","unsubscribe","clusterId","createdAt") VALUES %s '
                     'ON CONFLICT ("campaignId","email") DO UPDATE SET '
                     '"sent" = EXCLUDED."sent", '
                     '"hardBounce" = EXCLUDED."hardBounce", '
@@ -318,7 +331,10 @@ def sync_mailcamp_account(account, pg_conn):
                     '"uniqueClicker" = EXCLUDED."uniqueClicker", '
                     '"unsubscribe" = EXCLUDED."unsubscribe", '
                     '"clusterId" = EXCLUDED."clusterId"',
-                    user_rows,
+                    [
+                        row + (datetime.utcnow(),)
+                        for row in user_rows
+                    ],
                 )
 
             now = datetime.utcnow()
