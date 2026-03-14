@@ -7,8 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-basegrow-dev")
-DEBUG = os.getenv("DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "82.25.97.51,admin.basegrow.com").split(",") if h.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",

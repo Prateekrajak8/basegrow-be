@@ -8,9 +8,11 @@ import requests
 from django.conf import settings
 from django.db import connection
 from openpyxl import load_workbook
-from rest_framework.decorators import api_view, parser_classes
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view, parser_classes, authentication_classes
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication
 
 from .services import (
     build_date_filter,
@@ -26,6 +28,11 @@ from .services import (
 def _dictfetchall(cursor) -> List[Dict[str, Any]]:
     columns = [col[0] for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return
 
 
 @api_view(["GET", "POST"])
@@ -123,6 +130,7 @@ def get_cluster_data_view(request):
 
 
 @api_view(["POST"])
+@authentication_classes([CsrfExemptSessionAuthentication])
 def domain_data_by_campaign_view(request):
     try:
         campaign_id = int(request.data.get("campaignId"))
@@ -190,6 +198,7 @@ def domain_data_by_campaign_view(request):
 
 
 @api_view(["POST"])
+@authentication_classes([CsrfExemptSessionAuthentication])
 def cluster_data_by_campaign_view(request):
     try:
         campaign_id = int(request.data.get("campaignId"))
