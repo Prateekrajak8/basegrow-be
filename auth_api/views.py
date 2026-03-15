@@ -62,3 +62,52 @@ def login_view(request):
         )
     except Exception:
         return Response({"error": "Internal server error"}, status=500)
+
+
+@api_view(["POST"])
+def register_view(request):
+    try:
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        if not email or not password:
+            return Response({"error": "Email and password are required"}, status=400)
+
+        email = email.strip().lower()
+
+        existing = _fetch_user_by_email(email)
+        if existing:
+            return Response({"error": "User already exists"}, status=409)
+
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        now = datetime.datetime.utcnow()
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'INSERT INTO "User" (email, password, "createdAt") VALUES (%s, %s, %s) RETURNING id',
+                [email, hashed, now],
+            )
+            user_id = cursor.fetchone()[0]
+
+        token = jwt.encode(
+            {
+                "userId": user_id,
+                "email": email,
+                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=12),
+            },
+            settings.JWT_SECRET,
+            algorithm="HS256",
+        )
+
+        return Response(
+            {
+                "token": token,
+                "user": {
+                    "id": user_id,
+                    "email": email,
+                },
+            },
+            status=201,
+        )
+    except Exception:
+        return Response({"error": "Internal server error"}, status=500)
